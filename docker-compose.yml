@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # 1. MongoDB Database Container
+  db:
+    image: mongo:latest
+    container_name: cuet-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - cuet-network
+    restart: always
+
+  # 2. Node.js Express API Backend
+  backend:
+    build: ./backend
+    container_name: cuet-express-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGO_URI=mongodb://db:27017/cuet_db
+      - PORT=5000
+      - JWT_SECRET=cuet_nta_secure_secret_token_123
+    depends_on:
+      - db
+    networks:
+      - cuet-network
+    restart: always
+
+  # 3. React Frontend Container (Nginx)
+  frontend:
+    build: ./frontend
+    container_name: cuet-react-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - cuet-network
+    restart: always
+
+volumes:
+  mongo-data:
+
+networks:
+  cuet-network:
+    driver: bridge

@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 font-sans select-none antialiased;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+  }
+}
+
+/* --- NTA CUSTOM PALETTE SHAPES --- */
+
+/* 1. NOT VISITED (Grey/White box with border) */
+.nta-shape-not-visited {
+  background-color: #ffffff;
+  border: 1px solid #7f8c8d;
+  color: #2c3e50;
+  border-radius: 4px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  transition: all 0.15s ease-in-out;
+}
+.nta-shape-not-visited:hover {
+  border-color: #34495e;
+  transform: translateY(-1px);
+}
+
+/* 2. NOT ANSWERED (Red - Flat top, curved/slanted bottom corners) */
+.nta-shape-not-answered {
+  background-color: #e74c3c;
+  color: #ffffff;
+  border: 1px solid #c0392b;
+  border-radius: 0 0 14px 14px; /* Curved bottom, flat top */
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  transition: all 0.15s ease-in-out;
+}
+.nta-shape-not-answered:hover {
+  background-color: #c0392b;
+  transform: translateY(-1px);
+}
+
+/* 3. ANSWERED (Green - Curved/slanted top corners, flat bottom) */
+.nta-shape-answered {
+  background-color: #2ecc71;
+  color: #ffffff;
+  border: 1px solid #27ae60;
+  border-radius: 14px 14px 0 0; /* Curved top, flat bottom */
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  transition: all 0.15s ease-in-out;
+}
+.nta-shape-answered:hover {
+  background-color: #27ae60;
+  transform: translateY(-1px);
+}
+
+/* 4. MARKED FOR REVIEW (Purple circle) */
+.nta-shape-marked-review {
+  background-color: #8e44ad;
+  color: #ffffff;
+  border: 1px solid #7d3c98;
+  border-radius: 9999px; /* Perfect circle */
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  transition: all 0.15s ease-in-out;
+}
+.nta-shape-marked-review:hover {
+  background-color: #7d3c98;
+  transform: translateY(-1px);
+}
+
+/* 5. ANSWERED & MARKED FOR REVIEW (Purple circle with green badge) */
+.nta-shape-answered-review {
+  background-color: #8e44ad;
+  color: #ffffff;
+  border: 1px solid #7d3c98;
+  border-radius: 9999px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  position: relative;
+  transition: all 0.15s ease-in-out;
+}
+.nta-shape-answered-review::after {
+  content: '';
+  position: absolute;
+  bottom: 0px;
+  right: 0px;
+  width: 10px;
+  height: 10px;
+  background-color: #2ecc71;
+  border: 1px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 2px rgba(0,0,0,0.5);
+}
+.nta-shape-answered-review:hover {
+  background-color: #7d3c98;
+  transform: translateY(-1px);
+}
+
+/* Focus / Current Question Outline */
+.nta-shape-current {
+  outline: 3px solid #3498db;
+  outline-offset: 2px;
+  box-shadow: 0 0 8px rgba(52, 152, 219, 0.5) !important;
+}
+
+/* Prevent text copying and standard interactions */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
