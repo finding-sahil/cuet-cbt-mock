@@ -42,7 +42,7 @@ const Dashboard = () => {
 
   const onViewAttemptResult = (attempt) => {
     setLatestAttemptResult(attempt);
-    navigate('/result');
+    navigate(`/result/${attempt._id}`);
   };
 
   return (

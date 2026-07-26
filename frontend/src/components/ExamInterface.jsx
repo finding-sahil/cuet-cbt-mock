@@ -151,7 +151,7 @@ const ExamInterface = () => {
       }
       
       setLatestAttemptResult(result);
-      navigate('/result');
+      navigate(`/result/${result._id}`);
     };
 
     const terminateAndSubmit = async (reason) => {
@@ -208,14 +208,13 @@ const ExamInterface = () => {
   }, [submitExam, navigate, setLatestAttemptResult]);
 
   // --- SYNCHRONIZE SELECTED RADIO VALUE WITH QUESTION INDEX CHANGE ---
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (currentQuestion) {
       const respObj = responses[currentQuestion.id];
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedOption(respObj?.selectedOption || '');
     }
-  }, [currentQuestionIndex, responses, currentQuestion]);
+  }, [currentQuestionIndex, currentQuestion]);
 
   // --- KEYBOARD LOCK & ADVISORY SYSTEM ---
   useEffect(() => {
@@ -285,7 +284,7 @@ const ExamInterface = () => {
     }
     
     setLatestAttemptResult(result);
-    navigate('/result');
+    navigate(`/result/${result._id}`);
   };
 
   // Submit action

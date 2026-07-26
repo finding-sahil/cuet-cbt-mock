@@ -1,22 +1,70 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Award, CheckCircle, XCircle, AlertCircle, RefreshCw, BarChart2, BookOpen, AlertTriangle } from 'lucide-react';
 import { useExam } from '../context/ExamContext';
 
-const Result = ({ attemptData }) => {
-  const [activeTab, setActiveTab] = useState('summary');
+const Result = () => {
+  const { attemptId } = useParams();
   const navigate = useNavigate();
-  const { setLatestAttemptResult } = useExam();
+  const { latestAttemptResult, setLatestAttemptResult, API_BASE_URL } = useExam();
+  
+  const [activeTab, setActiveTab] = useState('summary');
+  const [attemptData, setAttemptData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // If there's no attempt data passed in (e.g. on direct navigation to /result or refresh),
-  // we would normally read from context or redirect to dashboard.
-  // For now, assuming attemptData is always populated by the time it gets here.
-  // We'll just provide a fallback if attemptData is missing.
+  useEffect(() => {
+    // If the attempt is already in the context and matches the URL, use it immediately
+    if (latestAttemptResult && latestAttemptResult._id === attemptId) {
+      setAttemptData(latestAttemptResult);
+      setLoading(false);
+      return;
+    }
+
+    // Otherwise, fetch it from the backend
+    const fetchAttempt = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/attempts/${attemptId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setAttemptData(data);
+          setLatestAttemptResult(data);
+        } else {
+          setAttemptData(null);
+        }
+      } catch (err) {
+        console.error('Failed to fetch attempt data:', err);
+        setAttemptData(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAttempt();
+  }, [attemptId, latestAttemptResult, API_BASE_URL, setLatestAttemptResult]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center font-sans">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-700 mx-auto"></div>
+        <p className="text-sm text-gray-500 mt-4 font-semibold">Loading attempt details...</p>
+      </div>
+    );
+  }
+
   if (!attemptData) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
-        <p className="text-gray-500 mb-4">No recent attempt found.</p>
-        <button onClick={() => navigate('/dashboard')} className="px-4 py-2 bg-blue-600 text-white rounded">Return to Dashboard</button>
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center font-sans">
+        <AlertTriangle className="w-16 h-16 text-yellow-500 mb-4" />
+        <h2 className="text-xl font-bold text-gray-800 mb-2">Attempt Not Found</h2>
+        <p className="text-gray-500 mb-6 text-sm text-center px-4">
+          The requested examination attempt could not be located. It may have been deleted or the link is invalid.
+        </p>
+        <button 
+          onClick={() => navigate('/dashboard')} 
+          className="px-6 py-2 bg-[#0f2d59] hover:bg-blue-900 text-white text-sm font-bold rounded shadow transition active:scale-95"
+        >
+          Return to Dashboard
+        </button>
       </div>
     );
   }

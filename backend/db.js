@@ -208,6 +208,15 @@ export const dbService = {
     }
   },
 
+  getAttemptById: async (id) => {
+    if (isMongoConnected) {
+      return await AttemptModel.findById(id).lean();
+    } else {
+      const db = readJsonDb();
+      return db.attempts.find(a => a._id === id) || null;
+    }
+  },
+
   saveAttempt: async (attempt) => {
     if (isMongoConnected) {
       const newAttempt = new AttemptModel(attempt);

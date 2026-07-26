@@ -329,6 +329,16 @@ app.get('/api/attempts', async (req, res) => {
   }
 });
 
+app.get('/api/attempts/:id', async (req, res) => {
+  try {
+    const attempt = await dbService.getAttemptById(req.params.id);
+    if (!attempt) return res.status(404).json({ error: 'Attempt not found.' });
+    res.json(attempt);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start listening
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[Server] CUET Simulation Backend running on LAN at: http://0.0.0.0:${PORT}`);
