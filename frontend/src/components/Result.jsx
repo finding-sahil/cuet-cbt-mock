@@ -1,8 +1,25 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Award, CheckCircle, XCircle, AlertCircle, RefreshCw, BarChart2, BookOpen, AlertTriangle } from 'lucide-react';
+import { useExam } from '../context/ExamContext';
 
-const Result = ({ attemptData, onReturnToDashboard }) => {
+const Result = ({ attemptData }) => {
   const [activeTab, setActiveTab] = useState('summary');
+  const navigate = useNavigate();
+  const { setLatestAttemptResult } = useExam();
+
+  // If there's no attempt data passed in (e.g. on direct navigation to /result or refresh),
+  // we would normally read from context or redirect to dashboard.
+  // For now, assuming attemptData is always populated by the time it gets here.
+  // We'll just provide a fallback if attemptData is missing.
+  if (!attemptData) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <p className="text-gray-500 mb-4">No recent attempt found.</p>
+        <button onClick={() => navigate('/dashboard')} className="px-4 py-2 bg-blue-600 text-white rounded">Return to Dashboard</button>
+      </div>
+    );
+  }
 
   const {
     subject,
@@ -79,7 +96,10 @@ const Result = ({ attemptData, onReturnToDashboard }) => {
         </div>
         
         <button
-          onClick={onReturnToDashboard}
+          onClick={() => {
+            setLatestAttemptResult(null);
+            navigate('/dashboard');
+          }}
           className="flex items-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-[#0f2d59] text-white text-xs font-bold rounded shadow transition active:scale-95 cursor-pointer"
         >
           <RefreshCw className="w-3.5 h-3.5" />

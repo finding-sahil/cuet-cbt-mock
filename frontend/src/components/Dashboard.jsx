@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useExam } from '../context/ExamContext';
 import { BookOpen, Trophy, History, ArrowRight, LogOut, CheckCircle2, User } from 'lucide-react';
 
-const Dashboard = ({ onSelectSubject, onViewAttemptResult, onLogout }) => {
-  const { user, API_BASE_URL, logout } = useExam();
+const Dashboard = () => {
+  const { user, API_BASE_URL, logout, setLatestAttemptResult } = useExam();
+  const navigate = useNavigate();
   const [attempts, setAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,6 +36,15 @@ const Dashboard = ({ onSelectSubject, onViewAttemptResult, onLogout }) => {
     ? Math.round(attempts.reduce((sum, a) => sum + a.accuracy, 0) / attempts.length) 
     : 0;
 
+  const handleSelectSubject = (subject) => {
+    navigate('/instructions');
+  };
+
+  const onViewAttemptResult = (attempt) => {
+    setLatestAttemptResult(attempt);
+    navigate('/result');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans no-select">
       {/* Top Banner Header */}
@@ -59,7 +70,7 @@ const Dashboard = ({ onSelectSubject, onViewAttemptResult, onLogout }) => {
           <button
             onClick={() => {
               logout();
-              onLogout();
+              navigate('/login');
             }}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 rounded text-red-600 hover:bg-red-50 text-xs font-bold transition active:scale-95 cursor-pointer"
           >
@@ -159,7 +170,7 @@ const Dashboard = ({ onSelectSubject, onViewAttemptResult, onLogout }) => {
               </div>
               
               <button
-                onClick={() => onSelectSubject('english')}
+                onClick={() => handleSelectSubject('english')}
                 className="mt-6 w-full py-3 bg-[#0f2d59] hover:bg-[#0b2142] text-white text-sm font-extrabold rounded flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer shadow-md"
               >
                 Proceed to Read Mock Instructions

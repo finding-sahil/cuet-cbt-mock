@@ -1,12 +1,14 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useExam } from '../context/ExamContext';
 import { HelpCircle, FileText } from 'lucide-react';
 
-const Instructions = ({ onStartExam }) => {
-  const { user, isTerminalAuthorized } = useExam();
+const Instructions = () => {
+  const { user, isTerminalAuthorized, startExam, setLatestAttemptResult } = useExam();
+  const navigate = useNavigate();
   const [agreed, setAgreed] = useState(false);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!isTerminalAuthorized) {
       alert('🔒 Terminal locked. Invigilator has not authorized this seat yet.');
       return;
@@ -15,7 +17,21 @@ const Instructions = ({ onStartExam }) => {
       alert('You must read the instructions and check the box at the bottom before starting the exam.');
       return;
     }
-    onStartExam(user.subject);
+    
+    // Request full screen for immersive CBT replication
+    try {
+      const docEl = document.documentElement;
+      if (docEl.requestFullscreen) {
+        await docEl.requestFullscreen();
+      }
+    } catch (err) {
+      console.warn('Fullscreen request blocked or not supported:', err);
+    }
+    
+    // Clear any previous attempts cache state on start
+    setLatestAttemptResult(null);
+    await startExam('english'); // ALWAYS start with english for the mock
+    navigate('/exam');
   };
 
   return (

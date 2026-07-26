@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useExam } from '../context/ExamContext';
 import { Monitor, AlertTriangle, ShieldCheck } from 'lucide-react';
 
-const Login = ({ onLoginSuccess }) => {
+const Login = () => {
   const { login } = useExam();
+  const navigate = useNavigate();
   const [name, setName] = useState('Taniyea Khanam Mazumder'); // Fixed candidate name
   const [rollNumber, setRollNumber] = useState('26051004928'); // Fixed roll number
   const [subject, setSubject] = useState('english'); // Default starting subject paper
@@ -37,9 +39,13 @@ const Login = ({ onLoginSuccess }) => {
       }
     }
 
-    const user = await login({ name, rollNumber, password, subject });
-    if (user) {
-      onLoginSuccess();
+    const loggedInUser = await login({ name, rollNumber, password, subject });
+    if (loggedInUser) {
+      if (loggedInUser.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
     }
   };
 

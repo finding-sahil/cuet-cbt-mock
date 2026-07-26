@@ -353,6 +353,7 @@ export const ExamProvider = ({ children }) => {
     localStorage.removeItem('cuet_active_subject');
     localStorage.removeItem('cuet_responses');
     localStorage.removeItem('cuet_question_index');
+    localStorage.removeItem('cuet_current_view');
   }, []);
 
   return (

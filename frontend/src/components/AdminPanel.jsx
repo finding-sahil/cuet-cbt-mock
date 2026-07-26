@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useExam } from '../context/ExamContext';
 import { Database, Plus, Trash2, Edit2, Upload, Settings, Search, LogOut, Check, FileCode } from 'lucide-react';
 
-const AdminPanel = ({ onLogout }) => {
+const AdminPanel = () => {
   const { token, logout, API_BASE_URL, subjectsConfig, isTerminalAuthorized, toggleTerminalAuth } = useExam();
+  const navigate = useNavigate();
   
   // States
   const [questions, setQuestions] = useState([]);
@@ -255,7 +257,7 @@ const AdminPanel = ({ onLogout }) => {
         <button
           onClick={() => {
             logout();
-            onLogout();
+            navigate('/login');
           }}
           className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-700 rounded text-slate-300 hover:bg-slate-900 text-xs font-bold transition active:scale-95 cursor-pointer"
         >

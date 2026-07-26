@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useExam } from '../context/ExamContext';
 import { Monitor, User, AlertCircle, Camera, ShieldAlert, CheckSquare } from 'lucide-react';
 
-const ExamInterface = ({ onExamSubmitted }) => {
+const ExamInterface = () => {
   const {
     questions,
     currentQuestionIndex,
@@ -13,8 +14,11 @@ const ExamInterface = ({ onExamSubmitted }) => {
     submitExam,
     activeSubject,
     user,
-    cheatingViolations
+    cheatingViolations,
+    setLatestAttemptResult
   } = useExam();
+  
+  const navigate = useNavigate();
 
   const [selectedOption, setSelectedOption] = useState('');
   const [lang, setLang] = useState('English');
@@ -134,6 +138,21 @@ const ExamInterface = ({ onExamSubmitted }) => {
   // --- TAB SWITCH & ANTI-CHEATING IMMEDIATE TERMINATION SYSTEM ---
   useEffect(() => {
     let terminated = false;
+    let blurTimeout = null;
+
+    const navigateToResult = (result) => {
+      // Exit full screen
+      try {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      } catch (err) {
+        console.warn('Exit fullscreen failed:', err);
+      }
+      
+      setLatestAttemptResult(result);
+      navigate('/result');
+    };
 
     const terminateAndSubmit = async (reason) => {
       if (terminated) return;
@@ -144,7 +163,7 @@ const ExamInterface = ({ onExamSubmitted }) => {
       // Auto-submit the exam immediately
       const result = await submitExam(true);
       if (result) {
-        onExamSubmitted(result);
+        navigateToResult(result);
       }
     };
 
@@ -155,8 +174,14 @@ const ExamInterface = ({ onExamSubmitted }) => {
     };
 
     const handleBlur = () => {
-      // Trigger if window focus is lost
-      terminateAndSubmit('The active exam window has lost focus (click detected outside of the exam frame).');
+      // Add a small delay to avoid false positives (like closing the fullscreen prompt)
+      blurTimeout = setTimeout(() => {
+        terminateAndSubmit('The active exam window has lost focus (click detected outside of the exam frame).');
+      }, 1500); // 1.5 seconds grace period
+    };
+
+    const handleFocus = () => {
+      if (blurTimeout) clearTimeout(blurTimeout);
     };
 
     const preventCopy = (e) => e.preventDefault();
@@ -164,20 +189,23 @@ const ExamInterface = ({ onExamSubmitted }) => {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
     document.addEventListener('copy', preventCopy);
     document.addEventListener('cut', preventCopy);
     document.addEventListener('paste', preventCopy);
     document.addEventListener('contextmenu', preventRightClick);
 
     return () => {
+      if (blurTimeout) clearTimeout(blurTimeout);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
       document.removeEventListener('copy', preventCopy);
       document.removeEventListener('cut', preventCopy);
       document.removeEventListener('paste', preventCopy);
       document.removeEventListener('contextmenu', preventRightClick);
     };
-  }, []);
+  }, [submitExam, navigate, setLatestAttemptResult]);
 
   // --- SYNCHRONIZE SELECTED RADIO VALUE WITH QUESTION INDEX CHANGE ---
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -187,7 +215,7 @@ const ExamInterface = ({ onExamSubmitted }) => {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedOption(respObj?.selectedOption || '');
     }
-  }, [currentQuestionIndex, responses, currentQuestion, onExamSubmitted, submitExam]);
+  }, [currentQuestionIndex, responses, currentQuestion]);
 
   // --- KEYBOARD LOCK & ADVISORY SYSTEM ---
   useEffect(() => {
@@ -214,7 +242,7 @@ const ExamInterface = ({ onExamSubmitted }) => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showConfirmSubmit, handleSaveAndNext, handleNextOnly, currentQuestionIndex, changeQuestionIndex, onExamSubmitted, submitExam]);
+  }, [showConfirmSubmit, handleSaveAndNext, handleNextOnly, currentQuestionIndex, changeQuestionIndex]);
 
   if (questions.length === 0 || !currentQuestion) {
     return (
@@ -246,12 +274,26 @@ const ExamInterface = ({ onExamSubmitted }) => {
   const totalAnsweredMarked = getStatusCount('answered-review');
   const totalNotVisited = questions.length - (totalAnswered + totalNotAnswered + totalMarked + totalAnsweredMarked);
 
+  const navigateToResult = (result) => {
+    // Exit full screen
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    } catch (err) {
+      console.warn('Exit fullscreen failed:', err);
+    }
+    
+    setLatestAttemptResult(result);
+    navigate('/result');
+  };
+
   // Submit action
   const handleFinalSubmit = async () => {
     setShowConfirmSubmit(false);
     const result = await submitExam(true); // Bypass normal window.confirm since we have our customized overlay
     if (result) {
-      onExamSubmitted(result);
+      navigateToResult(result);
     }
   };
 
