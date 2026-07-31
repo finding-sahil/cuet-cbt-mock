@@ -1,12 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
-// On Windows, resolve leading slash issues with pathname from import.meta.url
+// Data directory uses CWD to avoid Windows pathname issues with import.meta.url
 const dataDir = path.join(process.cwd(), 'data');
 const jsonDbPath = path.join(dataDir, 'local_db.json');
 
@@ -16,6 +16,16 @@ if (!fs.existsSync(dataDir)) {
 }
 
 let isMongoConnected = false;
+
+// --- WRITE LOCK FOR JSON FILE (prevents concurrent write corruption) ---
+let writeLock = Promise.resolve();
+const acquireWriteLock = () => {
+  let release;
+  const newLock = new Promise(resolve => { release = resolve; });
+  const previousLock = writeLock;
+  writeLock = newLock;
+  return previousLock.then(() => release);
+};
 
 // 1. Mongoose Schema Definitions (for MongoDB Mode)
 const questionSchema = new mongoose.Schema({
@@ -83,7 +93,7 @@ try {
   isMongoConnected = false;
 }
 
-// 2. Local JSON Database Utility Functions
+// 2. Local JSON Database Utility Functions (with write-lock protection)
 const readJsonDb = () => {
   if (!fs.existsSync(jsonDbPath)) {
     const defaultData = { questions: [], attempts: [], configs: [] };
@@ -107,6 +117,16 @@ const writeJsonDb = (data) => {
   }
 };
 
+// Helper: execute a read-modify-write cycle under the write lock
+const withWriteLock = async (fn) => {
+  const release = await acquireWriteLock();
+  try {
+    return fn();
+  } finally {
+    release();
+  }
+};
+
 // 3. Unified API Interface Wrapper
 export const dbService = {
   isMongo: () => isMongoConnected,
@@ -114,7 +134,8 @@ export const dbService = {
   // QUESTION API
   getQuestions: async (subject = null) => {
     if (isMongoConnected) {
-      const filter = subject ? { subject } : {};
+      // Case-insensitive filter for MongoDB to match JSON behavior
+      const filter = subject ? { subject: { $regex: new RegExp(`^${subject}$`, 'i') } } : {};
       return await QuestionModel.find(filter).lean();
     } else {
       const db = readJsonDb();
@@ -135,6 +156,18 @@ export const dbService = {
     }
   },
 
+  // Batch lookup: fetch multiple questions by IDs in one call
+  getQuestionsByIds: async (ids) => {
+    const numIds = ids.map(Number);
+    if (isMongoConnected) {
+      return await QuestionModel.find({ id: { $in: numIds } }).lean();
+    } else {
+      const db = readJsonDb();
+      const idSet = new Set(numIds);
+      return db.questions.filter(q => idSet.has(q.id));
+    }
+  },
+
   saveQuestions: async (questionsArray) => {
     if (isMongoConnected) {
       // Bulk insert or replace
@@ -143,17 +176,19 @@ export const dbService = {
       }
       return { success: true, count: questionsArray.length };
     } else {
-      const db = readJsonDb();
-      questionsArray.forEach(newQ => {
-        const idx = db.questions.findIndex(q => q.id === newQ.id);
-        if (idx !== -1) {
-          db.questions[idx] = newQ;
-        } else {
-          db.questions.push(newQ);
-        }
+      return await withWriteLock(() => {
+        const db = readJsonDb();
+        questionsArray.forEach(newQ => {
+          const idx = db.questions.findIndex(q => q.id === newQ.id);
+          if (idx !== -1) {
+            db.questions[idx] = newQ;
+          } else {
+            db.questions.push(newQ);
+          }
+        });
+        writeJsonDb(db);
+        return { success: true, count: questionsArray.length };
       });
-      writeJsonDb(db);
-      return { success: true, count: questionsArray.length };
     }
   },
 
@@ -161,18 +196,20 @@ export const dbService = {
     if (isMongoConnected) {
       return await QuestionModel.findOneAndUpdate({ id: q.id }, q, { upsert: true, new: true });
     } else {
-      const db = readJsonDb();
-      if (!q.id) {
-        q.id = db.questions.length > 0 ? Math.max(...db.questions.map(x => x.id)) + 1 : 1;
-      }
-      const idx = db.questions.findIndex(x => x.id === q.id);
-      if (idx !== -1) {
-        db.questions[idx] = q;
-      } else {
-        db.questions.push(q);
-      }
-      writeJsonDb(db);
-      return q;
+      return await withWriteLock(() => {
+        const db = readJsonDb();
+        if (!q.id) {
+          q.id = db.questions.length > 0 ? Math.max(...db.questions.map(x => x.id)) + 1 : 1;
+        }
+        const idx = db.questions.findIndex(x => x.id === q.id);
+        if (idx !== -1) {
+          db.questions[idx] = q;
+        } else {
+          db.questions.push(q);
+        }
+        writeJsonDb(db);
+        return q;
+      });
     }
   },
 
@@ -181,10 +218,12 @@ export const dbService = {
     if (isMongoConnected) {
       return await QuestionModel.deleteOne({ id: numId });
     } else {
-      const db = readJsonDb();
-      db.questions = db.questions.filter(q => q.id !== numId);
-      writeJsonDb(db);
-      return { success: true };
+      return await withWriteLock(() => {
+        const db = readJsonDb();
+        db.questions = db.questions.filter(q => q.id !== numId);
+        writeJsonDb(db);
+        return { success: true };
+      });
     }
   },
 
@@ -192,19 +231,26 @@ export const dbService = {
     if (isMongoConnected) {
       await QuestionModel.deleteMany({});
     } else {
-      const db = readJsonDb();
-      db.questions = [];
-      writeJsonDb(db);
+      await withWriteLock(() => {
+        const db = readJsonDb();
+        db.questions = [];
+        writeJsonDb(db);
+      });
     }
   },
 
   // ATTEMPTS API
-  getAttempts: async () => {
+  getAttempts: async (rollNumber = null) => {
     if (isMongoConnected) {
-      return await AttemptModel.find({}).sort({ submittedAt: -1 }).lean();
+      const filter = rollNumber ? { rollNumber } : {};
+      return await AttemptModel.find(filter).sort({ submittedAt: -1 }).lean();
     } else {
       const db = readJsonDb();
-      return [...db.attempts].sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+      let results = db.attempts;
+      if (rollNumber) {
+        results = results.filter(a => a.rollNumber === rollNumber);
+      }
+      return [...results].sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
     }
   },
 
@@ -222,15 +268,17 @@ export const dbService = {
       const newAttempt = new AttemptModel(attempt);
       return await newAttempt.save();
     } else {
-      const db = readJsonDb();
-      const newAttempt = {
-        ...attempt,
-        _id: Math.random().toString(36).substring(2, 9),
-        submittedAt: new Date().toISOString()
-      };
-      db.attempts.push(newAttempt);
-      writeJsonDb(db);
-      return newAttempt;
+      return await withWriteLock(() => {
+        const db = readJsonDb();
+        const newAttempt = {
+          ...attempt,
+          _id: crypto.randomUUID(),
+          submittedAt: new Date().toISOString()
+        };
+        db.attempts.push(newAttempt);
+        writeJsonDb(db);
+        return newAttempt;
+      });
     }
   },
 
@@ -250,15 +298,17 @@ export const dbService = {
     if (isMongoConnected) {
       return await ConfigModel.findOneAndUpdate({ key }, { value }, { upsert: true, new: true });
     } else {
-      const db = readJsonDb();
-      const idx = db.configs.findIndex(c => c.key === key);
-      if (idx !== -1) {
-        db.configs[idx].value = value;
-      } else {
-        db.configs.push({ key, value });
-      }
-      writeJsonDb(db);
-      return { key, value };
+      return await withWriteLock(() => {
+        const db = readJsonDb();
+        const idx = db.configs.findIndex(c => c.key === key);
+        if (idx !== -1) {
+          db.configs[idx].value = value;
+        } else {
+          db.configs.push({ key, value });
+        }
+        writeJsonDb(db);
+        return { key, value };
+      });
     }
   }
 };

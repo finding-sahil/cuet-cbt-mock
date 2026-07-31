@@ -19,26 +19,8 @@ const Login = () => {
     if (!rollNumber.trim()) return alert('Please enter your Roll Number.');
     if (!password.trim()) return alert('Please enter your Date of Birth / Password.');
 
-    // Strict Client-Side Credentials Checks
-    if (isAdminMode) {
-      if (rollNumber.toLowerCase() !== 'admin') {
-        return alert('⚠️ Access Denied: Admin Roll Number must be "admin".');
-      }
-      if (password !== '13042007') {
-        return alert('⚠️ Access Denied: Incorrect Admin Security Token (must be "13042007").');
-      }
-    } else {
-      if (rollNumber !== '26051004928') {
-        return alert('⚠️ Access Denied: Invalid Student Roll Number.');
-      }
-      if (password !== '09052008') {
-        return alert('⚠️ Access Denied: Incorrect Date of Birth Password (must be "09052008").');
-      }
-      if (name.trim().toLowerCase() !== 'taniyea khanam mazumder') {
-        return alert('⚠️ Access Denied: Candidate Name mismatch.');
-      }
-    }
-
+    // Issue #1: Server is the sole authority for credential validation.
+    // No client-side password checks — the server returns specific error messages.
     const loggedInUser = await login({ name, rollNumber, password, subject });
     if (loggedInUser) {
       if (loggedInUser.role === 'admin') {

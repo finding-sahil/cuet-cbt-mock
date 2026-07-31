@@ -6,7 +6,7 @@ import { useExam } from '../context/ExamContext';
 const Result = () => {
   const { attemptId } = useParams();
   const navigate = useNavigate();
-  const { latestAttemptResult, setLatestAttemptResult, API_BASE_URL } = useExam();
+  const { latestAttemptResult, setLatestAttemptResult, token, API_BASE_URL } = useExam();
   
   const [activeTab, setActiveTab] = useState('summary');
   const [attemptData, setAttemptData] = useState(null);
@@ -23,7 +23,9 @@ const Result = () => {
     // Otherwise, fetch it from the backend
     const fetchAttempt = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/attempts/${attemptId}`);
+        const res = await fetch(`${API_BASE_URL}/attempts/${attemptId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         if (res.ok) {
           const data = await res.json();
           setAttemptData(data);

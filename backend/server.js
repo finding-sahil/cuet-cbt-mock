@@ -8,16 +8,39 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'cuet_nta_secure_secret_token_123';
 
-// Enable CORS for LAN accessibility (so students can access from other devices on the same network)
+// Issue #2: Crash on startup if JWT_SECRET is not set — no insecure fallback
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[FATAL] JWT_SECRET environment variable is not set. Server cannot start securely.');
+  process.exit(1);
+}
+
+// Issue #21: Restrict CORS to localhost and private network ranges instead of wildcard '*'
 app.use(cors({
-  origin: '*', // Allow all origins for local network testing
+  origin: (origin, callback) => {
+    // Allow requests with no origin (same-origin, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    // Allow localhost on any port and private network IPs (192.168.x.x, 10.x.x.x)
+    const allowed = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin);
+    if (allowed) return callback(null, true);
+    callback(new Error('CORS: Origin not allowed'));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json({ limit: '10mb' })); // Support larger bulk uploads
+
+// --- Issue #9: Fisher-Yates (Knuth) shuffle — uniform random permutation ---
+const fisherYatesShuffle = (array) => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
 
 // --- AUTH MIDDLEWARE ---
 const authenticateToken = (req, res, next) => {
@@ -34,6 +57,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // --- AUTHENTICATION ROUTES ---
+// Issue #1: Credentials sourced from env vars, never hardcoded in source
 app.post('/api/auth/login', async (req, res) => {
   const { name, rollNumber, password, subject } = req.body;
   
@@ -43,16 +67,15 @@ app.post('/api/auth/login', async (req, res) => {
 
   const isSystemAdmin = rollNumber.toLowerCase() === 'admin';
 
-  // Backend credentials matching
   if (isSystemAdmin) {
-    if (password !== '13042007') {
+    if (password !== process.env.ADMIN_PASSWORD) {
       return res.status(401).json({ error: 'Access Denied: Incorrect Admin Security Token.' });
     }
   } else {
-    if (rollNumber !== '26051004928') {
+    if (rollNumber !== process.env.STUDENT_ROLL) {
       return res.status(401).json({ error: 'Access Denied: Invalid Student Roll Number.' });
     }
-    if (password !== '09052008') {
+    if (password !== process.env.STUDENT_DOB) {
       return res.status(401).json({ error: 'Access Denied: Incorrect Date of Birth Password.' });
     }
   }
@@ -71,18 +94,25 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// --- INVIGILATOR TERMINAL ENTRY AUTHORIZATION FLAG ---
-let isTerminalAuthorized = false;
-
-app.get('/api/config/terminal-auth', (req, res) => {
-  res.json({ authorized: isTerminalAuthorized });
+// --- Issue #6/#20: INVIGILATOR TERMINAL AUTH — persisted to database instead of in-memory ---
+app.get('/api/config/terminal-auth', async (req, res) => {
+  try {
+    const authorized = await dbService.getConfig('terminalAuth', false);
+    res.json({ authorized: !!authorized });
+  } catch (error) {
+    res.json({ authorized: false });
+  }
 });
 
-app.post('/api/config/terminal-auth', authenticateToken, (req, res) => {
+app.post('/api/config/terminal-auth', authenticateToken, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin privileges required.' });
   const { authorized } = req.body;
-  isTerminalAuthorized = !!authorized;
-  res.json({ success: true, authorized: isTerminalAuthorized });
+  try {
+    await dbService.saveConfig('terminalAuth', !!authorized);
+    res.json({ success: true, authorized: !!authorized });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // --- SUBJECT CONFIG ROUTES ---
@@ -110,7 +140,8 @@ app.post('/api/config/subjects', authenticateToken, async (req, res) => {
 });
 
 // --- MOCK TEST QUESTIONS ROUTE ---
-app.get('/api/questions/test', async (req, res) => {
+// Issue #5: Strip correctAnswer and explanation from test responses — server scores, not client
+app.get('/api/questions/test', authenticateToken, async (req, res) => {
   const { subject } = req.query;
   if (!subject) return res.status(400).json({ error: 'Subject parameter is required.' });
 
@@ -125,19 +156,26 @@ app.get('/api/questions/test', async (req, res) => {
     const subConfig = configs.find(c => c.id.toLowerCase() === subject.toLowerCase()) || { selectQuestions: 40 };
     const limit = subConfig.selectQuestions || 40;
 
-    // Shuffle questions
-    const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
+    // Issue #9: Fisher-Yates shuffle instead of biased sort comparator
+    const shuffled = fisherYatesShuffle(allQuestions);
     
     // Slice to test length
     const selectedQuestions = shuffled.slice(0, Math.min(limit, shuffled.length));
 
     // Shuffle options inside each question to prevent cheating
     const randomizedQuestions = selectedQuestions.map((q, idx) => {
-      const shuffledOptions = [...q.options].sort(() => 0.5 - Math.random());
+      const shuffledOptions = fisherYatesShuffle(q.options);
       return {
-        ...q,
+        id: q.id,
+        subject: q.subject,
+        question: q.question,
+        options: shuffledOptions,
         originalIndex: idx + 1,
-        options: shuffledOptions
+        year: q.year,
+        difficulty: q.difficulty,
+        chapter: q.chapter,
+        image: q.image
+        // Issue #5: correctAnswer and explanation intentionally omitted
       };
     });
 
@@ -203,21 +241,21 @@ app.delete('/api/questions/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Bulk Upload JSON
+// Issue #10: Bulk Upload — always assign fresh IDs to prevent collisions
 app.post('/api/questions/bulk', authenticateToken, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin privileges required.' });
   try {
     const { questions } = req.body;
     if (!Array.isArray(questions)) return res.status(400).json({ error: 'Questions must be an array.' });
 
-    // Validate and assign correct IDs
+    // Compute next safe ID by scanning all existing questions
     const currentQuestions = await dbService.getQuestions();
     let nextId = currentQuestions.length > 0 ? Math.max(...currentQuestions.map(x => x.id)) + 1 : 1;
 
+    // Always assign fresh sequential IDs — strip any user-supplied IDs to avoid collisions
     const validatedQuestions = questions.map(q => {
-      const id = q.id || nextId++;
       return {
-        id,
+        id: nextId++,
         subject: q.subject || 'English',
         question: q.question,
         options: q.options || [],
@@ -237,14 +275,25 @@ app.post('/api/questions/bulk', authenticateToken, async (req, res) => {
 });
 
 // --- EXAM SUBMISSION & SCORING ---
-app.post('/api/attempts/submit', async (req, res) => {
+// Issue #3: Add authenticateToken — submissions must be authenticated
+app.post('/api/attempts/submit', authenticateToken, async (req, res) => {
   const { candidateName, rollNumber, subject, responses, timeTaken } = req.body;
 
   if (!candidateName || !rollNumber || !subject || !responses) {
     return res.status(400).json({ error: 'Missing mandatory fields.' });
   }
 
+  // Validate that the submitter matches the authenticated user (admins bypass)
+  if (req.user.role !== 'admin' && req.user.rollNumber !== rollNumber) {
+    return res.status(403).json({ error: 'Roll number mismatch with authenticated user.' });
+  }
+
   try {
+    // Issue #11: Batch-fetch all needed questions in one call instead of N+1 sequential reads
+    const questionIds = responses.map(r => r.questionId);
+    const questionsList = await dbService.getQuestionsByIds(questionIds);
+    const questionsMap = new Map(questionsList.map(q => [q.id, q]));
+
     // Scoring scheme: CUET style (+5 for correct, -1 for incorrect, 0 for unattempted)
     let score = 0;
     let correctAnswers = 0;
@@ -255,13 +304,13 @@ app.post('/api/attempts/submit', async (req, res) => {
     const scoredResponses = [];
 
     for (const resItem of responses) {
-      const q = await dbService.getQuestionById(resItem.questionId);
+      const q = questionsMap.get(Number(resItem.questionId));
       if (!q) continue;
 
       const isAttempted = resItem.selectedOption && resItem.selectedOption !== '';
-      const isCorrect = isAttempted && resItem.selectedOption === q.correctAnswer;
+      // Issue #12: Normalize comparison with trim() to handle whitespace differences
+      const isCorrect = isAttempted && resItem.selectedOption.trim() === q.correctAnswer.trim();
       
-      let itemScore = 0;
       let status = 'unvisited';
 
       if (isAttempted) {
@@ -319,20 +368,26 @@ app.post('/api/attempts/submit', async (req, res) => {
   }
 });
 
-// --- ATTEMPT HISTORY ROUTE ---
-app.get('/api/attempts', async (req, res) => {
+// --- ATTEMPT HISTORY ROUTES ---
+// Issue #4: Add authenticateToken — students see only their own data, admins see all
+app.get('/api/attempts', authenticateToken, async (req, res) => {
   try {
-    const attempts = await dbService.getAttempts();
+    const rollFilter = req.user.role === 'admin' ? null : req.user.rollNumber;
+    const attempts = await dbService.getAttempts(rollFilter);
     res.json(attempts);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/attempts/:id', async (req, res) => {
+app.get('/api/attempts/:id', authenticateToken, async (req, res) => {
   try {
     const attempt = await dbService.getAttemptById(req.params.id);
     if (!attempt) return res.status(404).json({ error: 'Attempt not found.' });
+    // Students can only view their own attempts
+    if (req.user.role !== 'admin' && attempt.rollNumber !== req.user.rollNumber) {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
     res.json(attempt);
   } catch (error) {
     res.status(500).json({ error: error.message });

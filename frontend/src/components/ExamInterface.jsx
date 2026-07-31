@@ -15,7 +15,8 @@ const ExamInterface = () => {
     activeSubject,
     user,
     cheatingViolations,
-    setLatestAttemptResult
+    setLatestAttemptResult,
+    isTransitioning // Issue #22: suppress anti-cheat during subject transition
   } = useExam();
   
   const navigate = useNavigate();
@@ -29,14 +30,18 @@ const ExamInterface = () => {
   const currentQuestion = questions[currentQuestionIndex];
 
   // --- EVENT TRIGGERS (defined early for useCallback) ---
+  // Issue #23: Save response, advance only if not on last question
   const handleSaveAndNext = useCallback(() => {
     if (!selectedOption) {
       alert('Please select an option before saving. If you want to skip, click "Next".');
       return;
     }
     saveResponse(currentQuestion.id, selectedOption, 'answered');
-    changeQuestionIndex(currentQuestionIndex + 1);
-  }, [selectedOption, currentQuestion, saveResponse, currentQuestionIndex, changeQuestionIndex]);
+    if (currentQuestionIndex < questions.length - 1) {
+      changeQuestionIndex(currentQuestionIndex + 1);
+    }
+    // On last question: response is saved successfully, no navigation needed
+  }, [selectedOption, currentQuestion, saveResponse, currentQuestionIndex, changeQuestionIndex, questions.length]);
 
   const handleClearResponse = useCallback(() => {
     setSelectedOption('');
@@ -155,7 +160,8 @@ const ExamInterface = () => {
     };
 
     const terminateAndSubmit = async (reason) => {
-      if (terminated) return;
+      // Issue #22: Don't trigger during English→Physics subject transition
+      if (terminated || isTransitioning) return;
       terminated = true;
       
       alert(`🚨 NTA CBT SECURITY TERMINATION LOCK:\n${reason}\n\nAs per standard National Testing Agency (NTA) guidelines, your exam session has been terminated immediately. Your options recorded so far have been securely saved and submitted to the scoring server.`);
@@ -205,7 +211,7 @@ const ExamInterface = () => {
       document.removeEventListener('paste', preventCopy);
       document.removeEventListener('contextmenu', preventRightClick);
     };
-  }, [submitExam, navigate, setLatestAttemptResult]);
+  }, [submitExam, navigate, setLatestAttemptResult, isTransitioning]);
 
   // --- SYNCHRONIZE SELECTED RADIO VALUE WITH QUESTION INDEX CHANGE ---
   // eslint-disable-next-line react-hooks/exhaustive-deps

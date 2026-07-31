@@ -4,7 +4,7 @@ import { useExam } from '../context/ExamContext';
 import { BookOpen, Trophy, History, ArrowRight, LogOut, CheckCircle2, User } from 'lucide-react';
 
 const Dashboard = () => {
-  const { user, API_BASE_URL, logout, setLatestAttemptResult } = useExam();
+  const { user, token, API_BASE_URL, logout, setLatestAttemptResult } = useExam();
   const navigate = useNavigate();
   const [attempts, setAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -12,14 +12,13 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchAttempts = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/attempts`);
+        const res = await fetch(`${API_BASE_URL}/attempts`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         if (res.ok) {
           const data = await res.json();
-          // Filter attempts for this user (roll number matching)
-          const userAttempts = data.filter(
-            a => a.rollNumber.toLowerCase() === user?.rollNumber.toLowerCase()
-          );
-          setAttempts(userAttempts);
+          // Issue #4: Server now filters by authenticated user — no client-side filtering needed
+          setAttempts(data);
         }
       } catch (err) {
         console.error('Failed to fetch historical attempts:', err);

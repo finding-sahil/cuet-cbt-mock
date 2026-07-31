@@ -2,6 +2,20 @@ import { dbService } from './db.js';
 
 console.log('[Seeder] Starting question seeder...');
 
+// Issue #9/#26: Fisher-Yates shuffle for uniform randomization of options
+const fisherYatesShuffle = (array) => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
+// NOTE (Issue #26): The seed templates below repeat across iterations with only
+// minor variant suffixes. For a production-quality question bank, expand the base
+// template arrays with more unique passages, vocabulary, and physics problems.
+
 // --- SEED TEMPLATES FOR ENGLISH (Varying programmatically to 500) ---
 const englishPassages = [
   {
